@@ -45,6 +45,10 @@ func TestExpand(t *testing.T) {
 			[]string{"--d=s3:A-BUCKET-ID", "--", "tree", "--a", "--b", "c", "--d"},
 			exec.Command("tree", "--a", "--b", "c", "--d=s3(A-BUCKET-ID)"),
 		},
+		{
+			[]string{"--e=s3:A", "--e", "s3:B", "--", "tree", "--e", "--b", "c", "--e", "-x", "--e"},
+			exec.Command("tree", "--e=s3(A)", "--b", "c", "--e", "s3(B)", "-x", "--e=s3(A)"),
+		},
 	}
 
 	for _, tc := range tests {
@@ -53,17 +57,18 @@ func TestExpand(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Log(cmd.Path)
-		t.Log(cmd.Args)
+		t.Log("g", cmd.Path)
+		t.Log("g", cmd.Args)
 
 		if cmd.Path != tc.cmd.Path {
-			t.Log("want", tc.cmd.Path)
+			t.Log("w", tc.cmd.Path)
 			t.Fatal()
 		}
 
 		if !reflect.DeepEqual(cmd.Args, tc.cmd.Args) {
-			t.Log("want", tc.cmd.Args)
+			t.Log("w", tc.cmd.Args)
 			t.Fatal()
 		}
+		t.Log()
 	}
 }
