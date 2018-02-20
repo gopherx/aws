@@ -46,9 +46,9 @@ func httpGet(url string) (string, error) {
 }
 
 type expando struct {
-	flag flag.Spec
-	cmd  cmdFunc
-	arg  string
+	flag  flag.Spec
+	cmd   cmdFunc
+	arg   string
 }
 
 func (e *expando) expand() (string, error) {
@@ -107,41 +107,41 @@ func appendExpando(args []string, e *expando) ([]string, error) {
 	return appendFlag(args, f), nil
 }
 
-func buildCmd(rem []string, exps []*expando) (*exec.Cmd, error) {
+// buildCmd generates the command from the flags found in rem and the provided expandos.
+// The rem varable may contain the same flag multiple times; the assigned value will be
+// the matching expando until all expandos are used when this happens the values from the
+// expandos will be used in a round robin fashion.
+func buildCmd(rem []string, exps expandoMap) (*exec.Cmd, error) {	
 	args := []string{}
-
-	if len(rem) > 1 {
+	_, err := flag.Scan(rem[1:], func(f flag.Spec) error {
 		var err error
-		_, err = flag.Scan(rem[1:], func(f flag.Spec) error {
-
-			if len(exps) > 0 && exps[0].flag.Name == f.Name {
-				args, err = appendExpando(args, exps[0])
-				exps = exps[1:]
-			} else {
-				args = appendFlag(args, f)
-			}
-
+		b, ok := exps[f.Name]
+		if !ok {
+			args = appendFlag(args, f)
 			return nil
-		})
-
-		if err != nil {
-			return nil, err
 		}
-	}
 
-	var err error
-	for _, e := range exps {
-		args, err = appendExpando(args, e)
-		if err != nil {
-			return nil, err
-		}
-	}
+		args, err = appendExpando(args, b.next())
+		return err
+	})
 
 	cmd := exec.Command(rem[0], args...)
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = os.Stderr	
 	return cmd, err
+}
 
+type expandoBag struct {
+	expandos []*expando
+	n int
+}
+
+type expandoMap map[string]*expandoBag
+
+func (e *expandoBag) next() *expando {
+	cur := e.expandos[e.n % len(e.expandos)]
+	e.n++
+	return cur
 }
 
 func expand(args []string, cmds cmdMap) (*exec.Cmd, error) {
@@ -154,7 +154,18 @@ func expand(args []string, cmds cmdMap) (*exec.Cmd, error) {
 		return nil, errors.InvalidArgument(nil, "no program to execute", args)
 	}
 
-	cmd, err := buildCmd(rem, exps)
+	m := expandoMap{}
+	for _, exp := range exps {
+		tmp, ok := m[exp.flag.Name]
+		if !ok {
+			tmp = &expandoBag{}
+			m[exp.flag.Name] = tmp
+		}
+
+		tmp.expandos = append(tmp.expandos, exp)
+	}
+
+	cmd, err := buildCmd(rem, m)
 	return cmd, err
 }
 
